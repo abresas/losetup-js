@@ -1,0 +1,19 @@
+{
+  "version": "0.0.1",
+  "main": "lib.js",
+  "name": "losetup",
+  "bin": "./losetup",
+  "scripts": {
+    "prepublish": "./node_modules/.bin/coffee -c lib.coffee losetup.coffee && (echo '#!/usr/bin/env node' | cat - losetup.js > losetup)"
+  },
+  "dependencies": {
+    "bluebird": "^2.10.0",
+    "commander": "^2.8.1",
+    "ioctl": "^1.0.0",
+    "struct": "0.0.8",
+    "typed-error": "^0.1.0"
+  },
+  "devDependencies": {
+    "coffee-script": "^1.10.0"
+  }
+}
