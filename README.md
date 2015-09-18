@@ -24,26 +24,46 @@ Documentation
   * [property: .device](#loopdevice_device)
   * [property: .inode](#loopdevice_inode)
   * [property: .fileName](#loopdevice_file_name)
+  * [property: .offset](#loopdevice_offset)
+* [losetup.errors](#errors)
+  * [.LosetupError](#errors_losetup_error)
+  * [.NotLoopDeviceError](#errors_not_loop_device_error)
+  * [.LoopDeviceBusyError](#errors_loop_device_busy_error)
+  * [.LoopDeviceNotUsedError](#errors_loop_device_not_used_error)
+  * [.LoopDeviceNotFoundError](#errors_loop_device_not_found_error)
 * [losetup.isLoopDevice(path)](#module_is_loop_device)
 * [losetup.getLoopDevice(path)](#module_get_loop_device)
 * [losetup.listAll(path = "/dev")](#module_list_all)
 * [losetup.listUsed(path = "/dev")](#module_list_used)
 * [losetup.findUnused(path = "/dev/")](#module_find_unused)
-* [losetup.attach](#module_attach)
-* [losetup.detach](#module_detach)
+* [losetup.attach(loopDevice, path, opts = {})](#module_attach)
+* [losetup.detach(loopDevice)](#module_detach)
+* [losetup.reloadPartitionTable(loopDevice)](#module_reload_partition_table)
 
 <a name="loopdevice"></a>
-#### LoopDevice(path, isUsed, device, inode, fileName)
+#### losetup.LoopDevice(path, isUsed, device, inode, fileName)
 
-"constructor" function for a loop device data structure.
+Class describing a loop device.
 
-Returns objects having the following fields:
+Properties:
 
-* <a name="loopdevice_path"></a> path: String
-* <a name="loopdevice_is_used"></a> isUsed: Boolean
-* <a name="loopdevice_device"></a> device: Integer
-* <a name="loopdevice_inode"></a> inode: Integer
-* <a name="loopdevice_file_name"></a> fileName: String
+* <a name="loopdevice_path"></a> *path*: String
+* <a name="loopdevice_is_used"></a> *isUsed*: Boolean
+* <a name="loopdevice_device"></a> *device*: Integer
+* <a name="loopdevice_inode"></a> *inode*: Integer
+* <a name="loopdevice_file_name"></a> *fileName*: String
+* <a name="loopdevice_offset"></a> *offset*: Integer
+
+<a name="errors"></a>
+#### losetup.errors
+
+Contains all the exported error classes:
+
+* <a name="errors_losetup_error"></a> *LosetupError*: All errors inherit from this class.
+* <a name="errors_not_loop_device_error"></a> *NotLoopDeviceError*: The device is not a loop device.
+* <a name="errors_loop_device_busy_error"></a> *LoopDeviceBusyError*: The device is busy (already attached).
+* <a name="errors_loop_device_not_used_error"></a> *LoopDeviceNotUsedError*: The device was expected to be attached, but isn't.
+* <a name="errors_loop_device_not_found_error"></a> *LoopDeviceNotFoundError*: The device does not exist at all.
 
 <a name="module_is_loop_device"></a>
 ##### losetup.isLoopDevice(String path) => Promise Boolean
@@ -66,11 +86,15 @@ List all the loop devices in path that are currently attached to a file.
 Finds the first loop device in path that is currently not used.
 
 <a name="module_attach"></a>
-##### losetup.attach(LoopDevice dev, String path) => Promise LoopDevice
+##### losetup.attach(LoopDevice dev, String path, Object opts = {}) => Promise LoopDevice
 Attaches the loop device dev to the file in path.
 
 Result promise resolves to an updated loop device description.
 Does not alter the input object.
+
+The third argument defines additional options:
+  * *partscan*: Enable partition scanning on device. Boolean, defaults to false.
+  * *offset*: Attach to an offset in the file, in bytes. Number, defaults to 0.
 
 <a name="module_detach"></a>
 ##### losetup.detach(LoopDevice dev) => Promise LoopDevice
@@ -78,6 +102,18 @@ Detaches any files from loop device dev.
 
 Result promise resolves to an updated loop device description.
 Does not alter the input object.
+
+<a name="module_reload_partition_table"></a>
+##### losetup.reloadPartitionTable(LoopDevice dev) => Promise
+Forces the operating system to reload partition table for device.
+
+Uses BLKRRPART ioctl command.
+
+If device /dev/loopX is a disk with many partitions, then after calling this function,
+the operating system will create /dev/loopXpY for each partition of the disk.
+
+To make sure the operating system will scan the partition table,
+attach the device with partscan option enabled.
 
 Support
 -------
