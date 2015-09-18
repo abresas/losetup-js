@@ -77,16 +77,16 @@ Promise.try ->
 				losetup.attach(dev, program.args[1], program.opts())
 			else
 				show(dev)
-.catch losetup.NotLoopDeviceError, (e) ->
+.catch losetup.errors.NotLoopDeviceError, (e) ->
 	console.error('device not a loop device: ' + e.path)	
 	process.exit(65)
-.catch losetup.LoopDeviceBusyError, (e) ->
+.catch losetup.errors.LoopDeviceBusyError, (e) ->
 	console.error('loop device busy: ' + e.path)
 	process.exit(65)
-.catch losetup.LoopDeviceNotUsedError, (e) ->
+.catch losetup.errors.LoopDeviceNotUsedError, (e) ->
 	console.error('loop device is not used: ' + e.path)
 	process.exit(65)
-.catch losetup.LoopDeviceNotFoundError, (e) ->
+.catch losetup.errors.LoopDeviceNotFoundError, (e) ->
 	console.error('loop device not found: ' + e.path)
 	process.exit(65)
 .catch (e) ->

@@ -4,7 +4,9 @@ fs = Promise.promisifyAll(require 'fs')
 path = require 'path'
 ioctl = require 'ioctl'
 Struct = require 'struct'
-TypedError = require 'typed-error'
+
+exports.errors = errors = require './errors'
+{ NotLoopDeviceError, LoopDeviceBusyError, LoopDeviceNotUsedError, LoopDeviceNotFoundError } = errors
 
 DEV_LOOP_PATH = '/dev'
 LOOPMAJOR = 7
@@ -19,50 +21,29 @@ FLAGS_PARTSCAN = 8
 #
 # See http://lxr.free-electrons.com/source/include/uapi/linux/loop.h#L45
 # for the definition of struct loop_info64.
-Status64 = ->
-	status64 = Struct()
-		.word64Ule('device')
-		.word64Ule('inode')
-		.word64Ube('rdevice')
-		.word64Ule('offset')
-		.word64Ule('size_limit')
-		.word32Ule('number')
-		.word32Ule('encrypt_type')
-		.word32Ule('encrypt_key_size')
-		.word32Ule('flags')
-		.chars('file_name', 64)
-		.chars('encrypt_key', 32)
-		.array('init', 2, 'word64Ule')
-	status64.allocate()
+class Status64 extends Struct
+	constructor: ->
+		super
 
-class LosetupError extends TypedError
-exports.LosetupError = LosetupError
+		@word64Ule('device')
+		@word64Ule('inode')
+		@word64Ube('rdevice')
+		@word64Ule('offset')
+		@word64Ule('size_limit')
+		@word32Ule('number')
+		@word32Ule('encrypt_type')
+		@word32Ule('encrypt_key_size')
+		@word32Ule('flags')
+		@chars('file_name', 64)
+		@chars('encrypt_key', 32)
+		@array('init', 2, 'word64Ule')
+		@allocate()
+		@buffer().fill(0)
 
-class NotLoopDeviceError extends LosetupError
-	constructor: (message, @path) ->
-		@path = path
-		super message
-exports.NotLoopDeviceError = NotLoopDeviceError
-
-class LoopDeviceBusyError extends LosetupError
-	constructor: (message, @path) ->
-		@path = path
-		super message
-exports.LoopDeviceBusyError = LoopDeviceBusyError
-
-class LoopDeviceNotUsedError extends LosetupError
-	constructor: (message, @path) ->
-		super message
-exports.LoopDeviceNotUsedError = LoopDeviceNotUsedError
-
-class LoopDeviceNotFoundError extends LosetupError
-	constructor: (message, @path) ->
-		super message
-exports.LoopDeviceNotFoundError = LoopDeviceNotFoundError
-
-# LoopDevice describes a loop device, whether it is used or not.
-exports.LoopDevice = LoopDevice = (path, isUsed, device, inode, fileName, offset) ->
-	return { path, isUsed, device, inode, fileName, offset }
+# LoopDevice describes a loop device, used or not.
+class LoopDevice
+	constructor: (@path, @isUsed, @device, @inode, @fileName, @offset) ->
+exports.LoopDevice = LoopDevice
 
 # Read the loop device status for a device in path.
 #
@@ -73,7 +54,7 @@ readStatus = (path) ->
 	fd = fs.openAsync(path, 'r+').disposer (fd) ->
 		fs.closeAsync(fd)
 	Promise.using fd, (fd) ->
-		status64 = Status64()
+		status64 = new Status64()
 		buf = status64.buffer()
 		ioctl(fd, LOOP_GET_STATUS64, buf)
 		return status64
@@ -107,9 +88,9 @@ exports.getLoopDevice = getLoopDevice = (path) ->
 			throw new NotLoopDeviceError('Not a loop device', path)
 		readStatus(path)
 		.then (status) ->
-			LoopDevice(path, true, status.get('device'), status.get('inode'), status.get('file_name'), status.get('offset'))
+			new LoopDevice(path, true, status.get('device'), status.get('inode'), status.get('file_name'), status.get('offset'))
 		.catch ->
-			LoopDevice(path, false, null, null, null, 0)
+			new LoopDevice(path, false, null, null, null, 0)
 
 # List all loop devices, used or not.
 #
@@ -154,8 +135,7 @@ exports.attach = attach = Promise.method (loopDevice, path, opts = {}) ->
 		Promise.try ->
 			ioctl(devFd, LOOP_SET_FD, targetFd)
 		.then ->
-			status64 = Status64()	
-			status64.buffer().fill(0)
+			status64 = new Status64()
 			status64.set('file_name', path)
 			if opts.partscan
 				status64.set('flags', FLAGS_PARTSCAN)
