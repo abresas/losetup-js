@@ -4,9 +4,13 @@ program = require 'commander'
 
 show = (dev) ->
 	if dev.isUsed
-		console.log(dev.path + ': [' + ('0000' + dev.device.toString(16)).slice(-4) + ']:' + dev.inode + ' (' + dev.fileName + ')')
+		devno = ('0000' + dev.device.toString(16)).slice(-4)
+		msg = "#{dev.path}: [#{devno}]:#{dev.inode} (#{dev.fileName})"
+		if dev.offset
+			msg = "#{msg}, offset #{dev.offset}"
+		console.log(msg)
 	else
-		console.log('device ' + dev.path + ' is not used.')
+		console.log("device #{dev.path} is not used.")
 
 help = ->
 	console.log('Usage:')
@@ -19,6 +23,8 @@ help = ->
 	console.log('Options:')
 	console.log(' -h, --help             this help')
 	console.log(' -v, --verbose          verbose mode')
+	console.log(' -P, --partscan         enable partition scanning')
+	console.log(' -o, --offset <n>       start from offset <n> in file')
 	console.log(' --version              print version information')
 
 	process.exit(0)
@@ -29,12 +35,19 @@ program
 .option('-a, --all')
 .option('-d, --detach')
 .option('-f, --find')
+.option('-P, --partscan')
 .option('-v, --verbose')
 .option('-h, --help')
+.option('-o, --offset <n>')
 .on('help', help)
 .parse(process.argv)
 
 Promise.try ->
+	if program.offset? and not program.offset.match(/^[0-9]+$/)
+		console.error('offset must be an integer')
+		process.exit(1)
+
+
 	if program.detach # losetup -d [loopdev...]
 		if not program.args.length
 			devices = losetup.listUsed()
@@ -52,7 +65,7 @@ Promise.try ->
 		losetup.findUnused()
 		.then (dev) ->
 			if program.args.length
-				losetup.attach(dev, program.args[0])
+				losetup.attach(dev, program.args[0], program.opts())
 			else
 				console.log(dev.path)
 	else # losetup loopdev [file]
@@ -61,7 +74,7 @@ Promise.try ->
 		losetup.getLoopDevice(program.args[0])
 		.then (dev) ->
 			if program.args.length == 2
-				losetup.attach(dev, program.args[1])
+				losetup.attach(dev, program.args[1], program.opts())
 			else
 				show(dev)
 .catch losetup.NotLoopDeviceError, (e) ->

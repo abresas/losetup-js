@@ -12,6 +12,8 @@ LOOP_SET_FD = 0x4C00
 LOOP_CLR_FD = 0x4C01
 LOOP_SET_STATUS64 = 0x4C04
 LOOP_GET_STATUS64 = 0x4C05
+BLKRRPART = 4703
+FLAGS_PARTSCAN = 8
 
 # Data structure that can be used in place of loop_info64 for ioctl calls.
 #
@@ -54,8 +56,8 @@ class LoopDeviceNotUsedError extends LosetupError
 exports.LoopDeviceNotUsedError = LoopDeviceNotUsedError
 
 # LoopDevice describes a loop device, whether it is used or not.
-exports.LoopDevice = LoopDevice = (path, isUsed, device, inode, fileName) ->
-	return { path, isUsed, device, inode, fileName }
+exports.LoopDevice = LoopDevice = (path, isUsed, device, inode, fileName, offset) ->
+	return { path, isUsed, device, inode, fileName, offset }
 
 # Read the loop device status for a device in path.
 #
@@ -92,9 +94,9 @@ exports.getLoopDevice = getLoopDevice = (path) ->
 			throw new NotLoopDeviceError('Not a loop device', path)
 		readStatus(path)
 		.then (status) ->
-			LoopDevice(path, true, status.get('device'), status.get('inode'), status.get('file_name'))
+			LoopDevice(path, true, status.get('device'), status.get('inode'), status.get('file_name'), status.get('offset'))
 		.catch ->
-			LoopDevice(path, false, null, null, null)
+			LoopDevice(path, false, null, null, null, 0)
 
 # List all loop devices, used or not.
 #
@@ -128,12 +130,12 @@ exports.findUnused = findUnused = (path = DEV_LOOP_PATH) ->
 # Attach a loop device to a file, and return a new instance of LoopDevice.
 #
 # @returns Promise [LoopDevice]
-exports.attach = attach = (loopDevice, path, flags = 'r+') ->
+exports.attach = attach = (loopDevice, path, opts = {}) ->
 	Promise.try ->
 		if loopDevice.isUsed
 			throw new LoopDeviceBusyError('Cannot allocate already used device.', loopDevice.path)
 		devFd = fs.openAsync(loopDevice.path, 'r+')
-		targetFd = fs.openAsync(path, flags)
+		targetFd = fs.openAsync(path, 'r+')
 		Promise.all([ devFd, targetFd ])
 	.spread (devFd, targetFd) ->
 		Promise.try ->
@@ -149,6 +151,10 @@ exports.attach = attach = (loopDevice, path, flags = 'r+') ->
 			status64 = Status64()	
 			status64.buffer().fill(0)
 			status64.set('file_name', path)
+			if opts.partscan
+				status64.set('flags', FLAGS_PARTSCAN)
+			if opts.offset
+				status64.set('offset', opts.offset)
 			Promise.try ->
 				ioctl(devFd, LOOP_SET_STATUS64, status64.buffer(), true)
 			.catch (e) ->
@@ -156,11 +162,19 @@ exports.attach = attach = (loopDevice, path, flags = 'r+') ->
 				if e.errno
 					msg += ' ioctl errno: ' + e.errno
 				Promise.try ->
-					ioctl(fd, LOOP_CLR_FD)
+					ioctl(devFd, LOOP_CLR_FD)
 				.catch (e) ->
 					console.error('Failed to unmount during clean up', e, e.stack)
 				.finally ->
 					throw new LosetupError(msg)
+			.then ->
+				if opts.partscan
+					Promise.try ->
+						ioctl(devFd, BLKRRPART, 0)
+					.catch (e) ->
+						# Setting the loop device succeeded, but only rereading partition table failed.
+						# Print a warning, but consider the operation successful.
+						console.error('Failed to reread partition table.', e)
 		.finally ->
 			fs.closeAsync(devFd)
 	.then ->
@@ -178,3 +192,11 @@ exports.detach = detach = Promise.method (loopDevice) ->
 		ioctl(fd, LOOP_CLR_FD)
 	.then ->
 		getLoopDevice(loopDevice.path) # return loop device with new data
+
+exports.reloadPartitionTable = Promise.method (loopDevice) ->
+	Promise.try ->
+		if not loopDevice.isUsed
+			throw new LoopDeviceNotUsedError('Cannot read partition table from unallocated loop device.', loopDevice.path)
+		fs.openAsync(loopDevice.path, 'r')
+	.then (fd) ->
+		ioctl(fd, BLKRRPART, 0)
