@@ -86,6 +86,9 @@ Promise.try ->
 .catch losetup.LoopDeviceNotUsedError, (e) ->
 	console.error('loop device is not used: ' + e.path)
 	process.exit(65)
+.catch losetup.LoopDeviceNotFoundError, (e) ->
+	console.error('loop device not found: ' + e.path)
+	process.exit(65)
 .catch (e) ->
 	console.error('losetup error', e, e.stack)
 	process.exit(1)
